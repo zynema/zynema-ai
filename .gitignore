@@ -74,6 +74,13 @@ htmlcov/
 # =========================
 node_modules/
 
+# API Keys & Secrets
+api_key.txt
+*.pem
+*.key
+credentials.json
+secrets.json
+
 # =========================
 # Temporary files
 # =========================
