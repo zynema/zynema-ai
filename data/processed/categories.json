@@ -1,0 +1,66 @@
+[
+  {
+    "id": 1,
+    "name": "action"
+  },
+  {
+    "id": 2,
+    "name": "adventure"
+  },
+  {
+    "id": 3,
+    "name": "animation"
+  },
+  {
+    "id": 4,
+    "name": "comedy"
+  },
+  {
+    "id": 5,
+    "name": "documentary"
+  },
+  {
+    "id": 6,
+    "name": "drama"
+  },
+  {
+    "id": 7,
+    "name": "family"
+  },
+  {
+    "id": 8,
+    "name": "fantasy"
+  },
+  {
+    "id": 9,
+    "name": "horror"
+  },
+  {
+    "id": 10,
+    "name": "musical"
+  },
+  {
+    "id": 11,
+    "name": "mystery"
+  },
+  {
+    "id": 12,
+    "name": "other"
+  },
+  {
+    "id": 13,
+    "name": "romance"
+  },
+  {
+    "id": 14,
+    "name": "scifi"
+  },
+  {
+    "id": 15,
+    "name": "war"
+  },
+  {
+    "id": 16,
+    "name": "western"
+  }
+]
