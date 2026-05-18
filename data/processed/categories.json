@@ -57,10 +57,14 @@
   },
   {
     "id": 15,
-    "name": "war"
+    "name": "thriller"
   },
   {
     "id": 16,
+    "name": "war"
+  },
+  {
+    "id": 17,
     "name": "western"
   }
 ]
