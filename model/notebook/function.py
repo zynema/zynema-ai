@@ -7,10 +7,10 @@ Original file is located at
     https://colab.research.google.com/drive/1CcYay7froip17A6D8s9pKh5kNqshBWhV
 """
 
+import os
 import joblib
 import pandas as pd
 import numpy as np
-
 from scipy.sparse import hstack as sparse_hstack
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -19,225 +19,136 @@ api_feature_matrix = None
 api_df_movies = None
 
 def load_models_on_startup():
-    global api_tfidf_vectorizer
-    global api_feature_matrix
-    global api_df_movies
+
+    global api_tfidf_vectorizer, api_feature_matrix, api_df_movies
 
     try:
         print("Memuat model dan data API...")
 
-        api_tfidf_vectorizer = joblib.load(
-            "api_tfidf_vectorizer.pkl"
-        )
+        # Mengatur path dinamis berdasarkan lokasi file function.py ini berada
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        artifacts_dir = os.path.join(base_dir, '..', 'artifacts')
 
-        api_feature_matrix = joblib.load(
-            "api_feature_matrix.pkl"
-        )
+        # Menentukan path absolut untuk setiap file pickle
+        tfidf_path = os.path.join(artifacts_dir, "api_tfidf_vectorizer.pkl")
+        matrix_path = os.path.join(artifacts_dir, "api_feature_matrix.pkl")
+        movies_path = os.path.join(artifacts_dir, "api_df_movies.pkl")
 
-        api_df_movies = pd.read_pickle(
-            "api_df_movies.pkl"
-        )
+        # Proses loading file ke dalam variabel global
+        api_tfidf_vectorizer = joblib.load(tfidf_path)
+        api_feature_matrix = joblib.load(matrix_path)
+        api_df_movies = pd.read_pickle(movies_path)
 
-        print("Model dan data berhasil dimuat.")
+        print("Model dan data berhasil dimuat dengan aman dari folder artifacts.")
 
     except Exception as e:
-        print(f"Gagal memuat model/data: {e}")
+        print(f"Gagal memuat model/data pada startup: {e}")
 
 
 # =========================================================
-# FUNGSI REKOMENDASI
+# FUNGSI REKOMENDASI UTAMA UNTUK API
 # =========================================================
 
-def get_recommendations(
-    selected_genres: list,
-    num_recommendations: int = 10
-):
-    """
-    Menghasilkan rekomendasi film berdasarkan genre.
+def get_recommendations(selected_genres: list, num_recommendations: int = 10):
 
-    Parameters
-    ----------
-    selected_genres : list
-        List genre pilihan user.
-        Contoh:
-        ['action', 'comedy']
-
-    num_recommendations : int
-        Jumlah rekomendasi yang ingin ditampilkan.
-
-    Returns
-    -------
-    list[dict]
-        Hasil rekomendasi dalam format JSON-friendly.
-    """
-
-    global api_tfidf_vectorizer
-    global api_feature_matrix
-    global api_df_movies
+    global api_tfidf_vectorizer, api_feature_matrix, api_df_movies
 
     # =====================================================
-    # VALIDASI INPUT
+    # 1. VALIDASI INPUT & KONDISI MODEL
     # =====================================================
-
-    if not selected_genres:
+    if not selected_genres or not isinstance(selected_genres, list):
         return {
             "success": False,
-            "message": "Genre tidak boleh kosong.",
+            "message": "selected_genres harus berupa list dan tidak boleh kosong.",
             "data": []
         }
 
-    if not isinstance(selected_genres, list):
+    if any(v is None for v in [api_tfidf_vectorizer, api_feature_matrix, api_df_movies]):
         return {
             "success": False,
-            "message": "selected_genres harus berupa list.",
+            "message": "Model belum dimuat di server. Pastikan load_models_on_startup() sudah dijalankan.",
             "data": []
         }
-
-    # =====================================================
-    # CEK MODEL SUDAH DIMUAT
-    # =====================================================
-
-    if any(v is None for v in [
-        api_tfidf_vectorizer,
-        api_feature_matrix,
-        api_df_movies
-    ]):
-        return {
-            "success": False,
-            "message": "Model belum dimuat.",
-            "data": []
-        }
-
-    # =====================================================
-    # PROSES REKOMENDASI
-    # =====================================================
 
     try:
+        # =====================================================
+        # 2. PROSES VEKTORISASI INPUT USER
+        # =====================================================
 
-        # ---------------------------------------------
-        # Gabungkan genre input user
-        # ---------------------------------------------
-
+        # Gabungkan list genre pilihan user menjadi satu string (space-separated)
         selected_genres_str = " ".join(selected_genres)
 
-        # ---------------------------------------------
-        # Transform input genre ke TF-IDF vector
-        # ---------------------------------------------
+        # Transform string genre tersebut ke bentuk TF-IDF Vector
+        genre_vector_input = api_tfidf_vectorizer.transform([selected_genres_str])
 
-        genre_vector_input = api_tfidf_vectorizer.transform(
-            [selected_genres_str]
-        )
+        # Hitung jumlah kolom numerik hibrida (IMDB Score + Runtime) yang ada di matrix utama
+        num_tfidf_cols = len(api_tfidf_vectorizer.get_feature_names_out())
+        num_numeric_cols = api_feature_matrix.shape[1] - num_tfidf_cols
 
-        # ---------------------------------------------
-        # Hitung jumlah fitur numerik tambahan
-        # ---------------------------------------------
+        # Mengisi fitur numerik dengan nilai ideal (0.7) sebagai representasi profil target.
+        # Ini menghindari bias angka 0 yang bisa merusak perhitungan bobot jarak sudut cosine.
+        ideal_numeric_features = np.full((1, num_numeric_cols), 0.7)
 
-        num_tfidf_cols = len(
-            api_tfidf_vectorizer.get_feature_names_out()
-        )
-
-        num_numeric_cols = (
-            api_feature_matrix.shape[1]
-            - num_tfidf_cols
-        )
-
-        # ---------------------------------------------
-        # Dummy fitur numerik
-        # ---------------------------------------------
-
-        dummy_numeric_features = np.zeros(
-            (1, num_numeric_cols)
-        )
-
-        # ---------------------------------------------
-        # Gabungkan TF-IDF + fitur numerik
-        # ---------------------------------------------
-
+        # Satukan vektor teks genre dan fitur numerik ideal menjadi satu kesatuan matriks input
         input_feature_matrix = sparse_hstack([
             genre_vector_input,
-            dummy_numeric_features
+            ideal_numeric_features
         ])
 
-        # ---------------------------------------------
-        # Hitung cosine similarity
-        # ---------------------------------------------
+        # =====================================================
+        # 3. PERHITUNGAN COSINE SIMILARITY
+        # =====================================================
 
-        sim_scores = cosine_similarity(
-            input_feature_matrix,
-            api_feature_matrix
-        )[0]
+        # Hitung skor kemiripan antara input user dengan SEMUA film di database
+        sim_scores = cosine_similarity(input_feature_matrix, api_feature_matrix)[0]
 
-        # ---------------------------------------------
-        # Ambil film dengan similarity > 0
-        # ---------------------------------------------
-
+        # Ambil indeks film yang memiliki nilai kesamaan di atas 0
         movie_scores = [
             (idx, score)
             for idx, score in enumerate(sim_scores)
             if score > 0
         ]
 
-        # ---------------------------------------------
-        # Urutkan berdasarkan similarity tertinggi
-        # ---------------------------------------------
+        # Urutkan hasil pencarian dari nilai kemiripan tertinggi (paling relevan)
+        movie_scores = sorted(movie_scores, key=lambda x: x[1], reverse=True)
 
-        movie_scores = sorted(
-            movie_scores,
-            key=lambda x: x[1],
-            reverse=True
-        )
+        # Batasi indeks film yang diambil sebanyak nilai num_recommendations
+        movie_indices = [idx for idx, score in movie_scores[:num_recommendations]]
 
-        # ---------------------------------------------
-        # Ambil top-N rekomendasi
-        # ---------------------------------------------
+        # =====================================================
+        # 4. EKSTRAKSI DAN FORMATTING DATA FILM
+        # =====================================================
 
-        movie_indices = [
-            idx
-            for idx, score
-            in movie_scores[:num_recommendations]
+        kolom_output = [
+            "Title",
+            "parent_genre_str",
+            "IMDB Score",
+            "Runtime",
+            "poster",
+            "primary_language",
+            "Premiere"
         ]
 
-        # ---------------------------------------------
-        # Ambil data film
-        # ---------------------------------------------
+        # Ambil data film berdasarkan urutan kemiripan terbaik
+        recommendations = api_df_movies[kolom_output].iloc[movie_indices].copy()
 
-        recommendations = api_df_movies[
-            [
-                "Title",
-                "parent_genre_str",
-                "IMDB Score",
-                "Runtime",
-                "poster",
-                "Language",
-                "Premiere"
-            ]
-        ].iloc[movie_indices]
-
-        # ---------------------------------------------
-        # Tambahkan similarity score (opsional)
-        # ---------------------------------------------
-
-        recommendations = recommendations.copy()
-
+        # Tambahkan informasi similarity_score ke dalam dataframe hasil
         recommendations["similarity_score"] = [
-            round(score, 4)
-            for idx, score
-            in movie_scores[:num_recommendations]
+            round(score, 4) for idx, score in movie_scores[:num_recommendations]
         ]
 
+        # Kembalikan response sukses dalam format dict/JSON-friendly
         return {
             "success": True,
             "message": "Rekomendasi berhasil dibuat.",
             "total": len(recommendations),
-            "data": recommendations.to_dict(
-                orient="records"
-            )
+            "data": recommendations.to_dict(orient="records")
         }
 
     except Exception as e:
-
+        # Menangkap error internal agar API tidak mengalami crash total (HTTP 500)
         return {
             "success": False,
-            "message": f"Terjadi error: {str(e)}",
+            "message": f"Terjadi error pada internal function: {str(e)}",
             "data": []
         }
