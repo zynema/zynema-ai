@@ -2,41 +2,51 @@ from flask import Flask, jsonify, request
 import csv
 import json
 import os
+import sys
 
 app = Flask(__name__)
 
 # Path folder project
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Import function.py dari folder model/
+MODEL_DIR = os.path.join(BASE_DIR, "..", "..", "model", "notebook")
+
+sys.path.append(MODEL_DIR)
+
+from function import load_models_on_startup, get_recommendations as ai_get_recommendations
+
 # Load categories.json
 def load_categories():
-    with open(os.path.join(BASE_DIR, "categories.json"), "r") as f:
-        return json.load(f)
+    try:
+        with open(os.path.join(BASE_DIR, "categories.json"), "r") as f:
+            return json.load(f)
+
+    except FileNotFoundError:
+        print("categories.json not found")
+        return []
 
 
 def load_films():
-
     films = []
+    try:
+        with open(os.path.join(BASE_DIR, "netflix.csv"), "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for i, row in enumerate(reader, start=1):
+                films.append({
+                    "id"          : i,
+                    "title"       : row["Title"],
+                    "genre"       : row["Genre"],
+                    "parent_genre": row["parent_genre_str"],
+                    "poster"      : row["poster"],
+                    "imdb_score"  : row["IMDB Score"],
+                    "runtime"     : row["Runtime"],
+                    "language"    : row["Language"],
+                    "premiere"    : row["Premiere"],
+                })
 
-    # Load netlifx.csv
-    with open(os.path.join(BASE_DIR, "netflix.csv"), "r", encoding="utf-8") as f:
-
-        reader = csv.DictReader(f)
-
-        # Generate id otomatis mulai dari 1
-        for i, row in enumerate(reader, start=1):
-
-            films.append({
-                "id"          : i,
-                "title"       : row["Title"],
-                "genre"       : row["Genre"],
-                "parent_genre": row["parent_genre_str"],
-                "poster"      : row["poster"],
-                "imdb_score"  : row["IMDB Score"],
-                "runtime"     : row["Runtime"],
-                "language"    : row["Language"],
-                "premiere"    : row["Premiere"],
-            })
+    except FileNotFoundError:
+        print("netflix.csv not found")
 
     return films
 
@@ -44,14 +54,7 @@ def load_films():
 # Load data sekali saat server startup
 CATEGORIES = load_categories()
 FILMS      = load_films()
-
-
-def film_matches_categories(film, category_names):
-    film_genre = film["parent_genre"].lower()
-    return any(
-        cat.lower() == film_genre
-        for cat in category_names
-    )
+load_models_on_startup()
 
 
 @app.route("/categories", methods=["GET"])
@@ -65,21 +68,19 @@ def get_categories():
 @app.route("/recommendations", methods=["GET"])
 def get_recommendations():
 
-    # Support multiple query params:
-    # ?category=action&category=romance -> untuk multiple
+    # Support multiple query params: ?category=action&category=romance
     categories = request.args.getlist("category")
 
     if not categories:
         return jsonify({
             "status" : "error",
-            "message": "Query parameter 'category' is required."
+            "message": "Query parameter 'category' is required. Example: /recommendations?category=action"
         }), 400
 
-    valid_names = {
-        c["name"].lower()
-        for c in CATEGORIES
-    }
+    # Mengambil semua category valid dari categories.json
+    valid_names = {c["name"].lower() for c in CATEGORIES}
 
+    # Mengecek category yang tidak valid
     invalid = [
         c for c in categories
         if c.lower() not in valid_names
@@ -91,25 +92,38 @@ def get_recommendations():
             "message": f"Unknown category: {invalid}. Valid categories: {sorted(valid_names)}"
         }), 400
 
-    matched = [
-        {
-            "id"          : film["id"],
-            "title"       : film["title"],
-            "genre"       : film["genre"],
-            "parent_genre": film["parent_genre"],
-            "poster"      : film["poster"],
-            "imdb_score"  : film["imdb_score"],
-        }
+    # Memanggil AI recommendation function dari model/function.py
+    result = ai_get_recommendations(
+        selected_genres=categories,
+        num_recommendations=10
+    )
 
-        for film in FILMS
-        if film_matches_categories(film, categories)
-    ]
+    if not result["success"]:
+        return jsonify({
+            "status" : "error",
+            "message": result["message"]
+        }), 500
+
+    # Membersihkan dan merapikan response data dari AI
+    cleaned_data = []
+    
+    for film in result["data"]:
+        cleaned_data.append({
+            "title"            : film["Title"],
+            "parent_genre"     : film["parent_genre_str"],
+            "imdb_score"       : film["IMDB Score"],
+            "runtime"          : film["Runtime"],
+            "poster"           : film["poster"],
+            "primary_language" : film["primary_language"],
+            "premiere"         : film["Premiere"],
+            "similarity_score" : film["similarity_score"],
+        })
 
     return jsonify({
         "status": "success",
         "filter": categories,
-        "total" : len(matched),
-        "data"  : matched
+        "total" : result["total"],
+        "data"  : cleaned_data
     }), 200
 
 
