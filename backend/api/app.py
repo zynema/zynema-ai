@@ -2,17 +2,11 @@ from flask import Flask, jsonify, request
 import csv
 import json
 import os
-import sys
 
 app = Flask(__name__)
 
 # Path folder project
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Import function.py dari folder model/
-MODEL_DIR = os.path.join(BASE_DIR, "..", "..", "model", "notebook")
-
-sys.path.append(MODEL_DIR)
 
 from function import load_models_on_startup, get_recommendations as ai_get_recommendations
 
