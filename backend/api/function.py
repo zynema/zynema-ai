@@ -27,7 +27,7 @@ def load_models_on_startup():
 
         # Mengatur path dinamis berdasarkan lokasi file function.py ini berada
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        artifacts_dir = os.path.join(base_dir, '..', 'artifacts')
+        artifacts_dir = os.path.join(base_dir, 'artifacts')
 
         # Menentukan path absolut untuk setiap file pickle
         tfidf_path = os.path.join(artifacts_dir, "api_tfidf_vectorizer.pkl")
