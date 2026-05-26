@@ -103,11 +103,16 @@ def get_recommendations():
             "message": result["message"]
         }), 500
 
+    # Build a title -> id lookup from preloaded FILMS
+    title_to_id = {f["title"].lower(): f["id"] for f in FILMS}
+
     # Membersihkan dan merapikan response data dari AI
     cleaned_data = []
     
     for film in result["data"]:
+        film_id = title_to_id.get(film["Title"].lower())
         cleaned_data.append({
+            "id"               : film_id,
             "title"            : film["Title"],
             "parent_genre"     : film["parent_genre_str"],
             "imdb_score"       : film["IMDB Score"],
