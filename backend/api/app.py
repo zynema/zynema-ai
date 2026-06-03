@@ -6,157 +6,164 @@ import sys
 
 app = Flask(__name__)
 
-# Path folder project
+# Konfigurasi Path dan Import Modul Internal
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Ensure the api/ directory is on sys.path so Vercel can resolve sibling modules
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from function import load_models_on_startup, get_recommendations as ai_get_recommendations
+# Import fungsi AI dari file function_v2.py
+from function_v2 import load_models_on_startup, get_recommendations as ai_get_recommendations
 
-# Load categories.json
+# DATA LOADING (dijalankan sekali saat server start)
+
 def load_categories():
     try:
         with open(os.path.join(BASE_DIR, "categories.json"), "r") as f:
             return json.load(f)
-
     except FileNotFoundError:
         print("categories.json not found")
         return []
 
-
 def load_films():
     films = []
     try:
-        with open(os.path.join(BASE_DIR, "netflix.csv"), "r", encoding="utf-8") as f:
+        with open(os.path.join(BASE_DIR, "netflix_cleaned_v3.csv"), "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for i, row in enumerate(reader, start=1):
                 films.append({
-                    "id"          : i,
-                    "title"       : row["Title"],
-                    "genre"       : row["Genre"],
+                    "id": i,
+                    "title": row["Title"],
+                    "genre": row["Genre"],
                     "parent_genre": row["parent_genre_str"],
-                    "poster"      : row["poster"],
-                    "imdb_score"  : row["IMDB Score"],
-                    "runtime"     : row["Runtime"],
-                    "language"    : row["Language"],
-                    "premiere"    : row["Premiere"],
+                    "main_parent_genre": row["main_parent_genre"],
+                    "poster": row["poster"],
+                    "imdb_score": row["IMDB Score"],
+                    "runtime": row["Runtime"],
+                    "language": row["primary_language_capitalized"],
+                    "premiere": row["Premiere"],
+                    "director": row["Director"],
+                    "year_premiere": row["year_premiere"],
+                    "plot": row["Plot"],
                 })
-
     except FileNotFoundError:
-        print("netflix.csv not found")
-
+        print("netflix_cleaned_v3.csv not found")
     return films
 
-
-# Load data sekali saat server startup
+# Inisialisasi data statis
 CATEGORIES = load_categories()
-FILMS      = load_films()
+FILMS = load_films()
+
+# Memuat model AI (TF-IDF, scaler, matriks similarity) dari artifacts/
 load_models_on_startup()
 
+# ENDPOINTS API
 
 @app.route("/categories", methods=["GET"])
 def get_categories():
-    return jsonify({
-        "status": "success",
-        "data"  : CATEGORIES
-    }), 200
+    return jsonify({"status": "success", "data": CATEGORIES}), 200
 
+@app.route("/directors", methods=["GET"])
+def get_directors():
+    search = request.args.get("search", "").strip().lower()
+    seen = set()
+    directors = []
+    for film in FILMS:
+        name = (film.get("director") or "").strip()
+        if not name:
+            continue
+        key = name.lower()
+        if key not in seen:
+            seen.add(key)
+            directors.append(name)
+    if search:
+        directors = [d for d in directors if search in d.lower()]
+    directors.sort()
+    return jsonify({"status": "success", "total": len(directors), "data": directors}), 200
 
 @app.route("/recommendations", methods=["GET"])
 def get_recommendations():
-
-    # Support multiple query params: ?category=action&category=romance
+    # --- Validasi genre (wajib) ---
     categories = request.args.getlist("category")
-
     if not categories:
-        return jsonify({
-            "status" : "error",
-            "message": "Query parameter 'category' is required. Example: /recommendations?category=action"
-        }), 400
+        return jsonify({"status": "error", "message": "Parameter 'category' required"}), 400
 
-    # Mengambil semua category valid dari categories.json
     valid_names = {c["name"].lower() for c in CATEGORIES}
-
-    # Mengecek category yang tidak valid
-    invalid = [
-        c for c in categories
-        if c.lower() not in valid_names
-    ]
-
+    invalid = [c for c in categories if c.lower() not in valid_names]
     if invalid:
-        return jsonify({
-            "status" : "error",
-            "message": f"Unknown category: {invalid}. Valid categories: {sorted(valid_names)}"
-        }), 400
+        return jsonify({"status": "error", "message": f"Unknown category: {invalid}"}), 400
 
-    # Memanggil AI recommendation function dari model/function.py
+    # --- Parameter opsional ---
+    director_input = request.args.get("director", "").strip() or None
+    year_input = None
+    raw_year = request.args.get("year", "").strip()
+    if raw_year:
+        try:
+            year_input = int(raw_year)
+        except ValueError:
+            return jsonify({"status": "error", "message": "Year must be integer"}), 400
+
+    # --- Panggil fungsi AI (cosine similarity + TF-IDF) ---
     result = ai_get_recommendations(
         selected_genres=categories,
+        director_input=director_input,
+        year_input=year_input,
         num_recommendations=10
     )
 
     if not result["success"]:
-        return jsonify({
-            "status" : "error",
-            "message": result["message"]
-        }), 500
+        return jsonify({"status": "error", "message": result["message"]}), 500
 
-    # Build a title -> id lookup from preloaded FILMS
+    # --- Enrich response dengan ID dari dataset CSV ---
     title_to_id = {f["title"].lower(): f["id"] for f in FILMS}
-
-    # Membersihkan dan merapikan response data dari AI
     cleaned_data = []
-    
     for film in result["data"]:
         film_id = title_to_id.get(film["Title"].lower())
         cleaned_data.append({
-            "id"               : film_id,
-            "title"            : film["Title"],
-            "parent_genre"     : film["parent_genre_str"],
-            "imdb_score"       : film["IMDB Score"],
-            "runtime"          : film["Runtime"],
-            "poster"           : film["poster"],
-            "primary_language" : film["primary_language"],
-            "premiere"         : film["Premiere"],
-            "similarity_score" : film["similarity_score"],
+            "id": film_id,
+            "title": film["Title"],
+            "parent_genre": film["main_parent_genre"],
+            "imdb_score": film["IMDB Score"],
+            "runtime": film["Runtime"],
+            "poster": film["poster"],
+            "primary_language": film["primary_language_capitalized"],
+            "premiere": film["Premiere"],
+            "director": film["Director"],
+            "year_premiere": film["year_premiere"],
+            "plot": film["Plot"],
+            "similarity_score": film["similarity_score"],
         })
 
     return jsonify({
         "status": "success",
-        "filter": categories,
-        "total" : result["total"],
-        "data"  : cleaned_data
+        "filter": {"categories": categories, "director": director_input, "year": year_input},
+        "total": result["total"],
+        "data": cleaned_data
     }), 200
-
 
 @app.route("/films/<int:film_id>", methods=["GET"])
 def get_film_detail(film_id):
-
-    film = next(
-        (f for f in FILMS if f["id"] == film_id),
-        None
-    )
-
+    film = next((f for f in FILMS if f["id"] == film_id), None)
     if not film:
-        return jsonify({
-            "status" : "error",
-            "message": f"Film with id {film_id} not found."
-        }), 404
-
+        return jsonify({"status": "error", "message": "Film not found"}), 404
     return jsonify({
         "status": "success",
         "data": {
-            "id"          : film["id"],
-            "title"       : film["title"],
-            "genre"       : film["genre"],
+            "id": film["id"],
+            "title": film["title"],
+            "genre": film["genre"],
             "parent_genre": film["parent_genre"],
-            "poster"      : film["poster"],
+            "main_parent_genre": film["main_parent_genre"],
+            "poster": film["poster"],
+            "imdb_score": film["imdb_score"],
+            "runtime": film["runtime"],
+            "primary_language": film["language"],
+            "premiere": film["premiere"],
+            "director": film["director"],
+            "year_premiere": film["year_premiere"],
+            "plot": film["plot"],
         }
     }), 200
 
-
+# Run Server 
 if __name__ == "__main__":
-    # debug=True -> auto reload saat code berubah
     app.run(debug=True, port=5000)
