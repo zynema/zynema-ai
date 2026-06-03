@@ -25,7 +25,7 @@ def load_models_on_startup():
 
         # Mengatur path dinamis berdasarkan lokasi file ini berada
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        artifacts_dir = os.path.join(base_dir, '..', 'artifacts')
+        artifacts_dir = os.path.join(base_dir, 'artifacts')
 
         # Menentukan path absolut untuk file pkl tunggal kita
         model_path = os.path.join(artifacts_dir, "model_rekomendasi.pkl")
@@ -97,18 +97,23 @@ def get_recommendations(
         # C. Proses Fitur Numerik (IMDB, Runtime, Year Premier)
         # Ambil nilai median default dari dataset untuk data yang netral/tidak diinput user
         default_imdb = df_movies['IMDB Score'].median()
-        default_runtime = 0.5  # Nilai tengah representatif untuk kolom runtime_normalized (0 sampai 1)
+        # Hitung runtime_normalized dari kolom Runtime (karena tidak tersimpan di df_movies)
+        min_runtime = df_movies['Runtime'].min()
+        max_runtime = df_movies['Runtime'].max()
+        df_movies['runtime_normalized'] = (df_movies['Runtime'] - min_runtime) / (max_runtime - min_runtime)
+        default_runtime = df_movies['runtime_normalized'].median()
 
-        # Cek jika user memasukkan input year_premier, jika tidak gunakan median dataset
-        chosen_year = int(year_input) if year_input else df_movies['year_premier'].median()
+        # Cek jika user memasukkan input year_premiere, jika tidak gunakan median dataset
+        chosen_year = int(year_input) if year_input else df_movies['year_premiere'].median()
 
         # Gunakan scaler untuk menormalisasi nilai numerik input.
-        # Catatan: Scaler kita di-fit menggunakan susunan kolom [[IMDB Score, year_premier]]
-        user_numeric_scaled = scaler.transform([[default_imdb, chosen_year]])
+        # Catatan: Scaler kita di-fit menggunakan susunan kolom [IMDB Score, runtime_normalized, year_premiere]
+        user_numeric_scaled = scaler.transform([[default_imdb, default_runtime, chosen_year]])
         user_imdb_scaled = user_numeric_scaled[0][0]
-        user_year_scaled = user_numeric_scaled[0][1]
+        user_runtime_scaled = user_numeric_scaled[0][1]
+        user_year_scaled = user_numeric_scaled[0][2]
 
-        # Jika user TIDAK menginput year_premier, kita beri nilai year_scaled yang sedikit dinetralkan
+        # Jika user TIDAK menginput year_premiere, kita beri nilai year_scaled yang sedikit dinetralkan
         # agar tidak terlalu membiaskan pencarian berbasis kemiripan sudut cosine
         if not year_input:
             user_year_scaled = 0.7  # Nilai ideal profil target agar stabil
@@ -116,7 +121,7 @@ def get_recommendations(
         # Ubah fitur numerik menjadi matriks sparse terpisah, lalu disatukan
         numeric_vector_input = sparse_hstack([
             csc_matrix([[user_imdb_scaled]]),
-            csc_matrix([[default_runtime]]),
+            csc_matrix([[user_runtime_scaled]]),
             csc_matrix([[user_year_scaled]])
         ])
 
@@ -156,7 +161,7 @@ def get_recommendations(
             "Title",
             "main_parent_genre",
             "Director",
-            "year_premier",
+            "year_premiere",
             "IMDB Score",
             "Runtime",
             "poster",
