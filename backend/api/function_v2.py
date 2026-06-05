@@ -178,6 +178,9 @@ def get_recommendations(
             round(score, 4) for idx, score in movie_scores[:num_recommendations]
         ]
 
+        # Gilang: fix handling NaN value to null
+        recommendations = recommendations.replace({np.nan: None})
+
         # Kembalikan response sukses dalam format dict/JSON-friendly
         return {
             "success": True,
