@@ -1,10 +1,10 @@
-# 🎬 Zynema — Netflix Film Recommendation System
+# Zynema — Netflix Film Recommendation System
 
 Zynema is a content-based film recommendation system built on top of the Netflix Original Films dataset. It recommends movies using **TF-IDF vectorization** combined with **Cosine Similarity**, taking into account genre preferences, director, and premiere year. The backend is served as a REST API via Flask.
 
 ---
 
-## 📌 Features
+## Features
 
 - Recommend films based on 1–3 genre preferences
 - Optional filtering by director and premiere year
@@ -14,7 +14,7 @@ Zynema is a content-based film recommendation system built on top of the Netflix
 
 ---
 
-## 🗂️ Project Structure
+## Project Structure
 
 ```
 zynema-ai/
@@ -39,7 +39,7 @@ zynema-ai/
 
 ---
 
-## 🧠 How It Works
+## How It Works
 
 ### 1. Dataset
 
@@ -71,7 +71,7 @@ The trained artifacts (vectorizers, scaler, feature matrix, and film DataFrame) 
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -104,7 +104,7 @@ The server starts at `http://localhost:5000`.
 
 ---
 
-## 📡 API Endpoints
+## API Endpoints
 
 ### `GET /categories`
 
@@ -201,7 +201,7 @@ vercel deploy
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
@@ -216,6 +216,6 @@ vercel deploy
 
 ---
 
-## 📄 License
+## License
 
 This project is for educational purposes. Dataset sourced from [Kaggle](https://www.kaggle.com/datasets/luiscorter/netflix-original-films-imdb-scores) and enriched via the [OMDB API](http://www.omdbapi.com/).
