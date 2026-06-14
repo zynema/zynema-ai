@@ -205,9 +205,6 @@ The Zynema frontend is maintained in a separate repository: **[zynema/zynema-fro
 Follow the steps below to seamlessly connect the Next.js frontend with the Flask backend in both local (development) and production (Vercel) environments.
 
 ---
-```
-
----
 
 ## Tech Stack
 
