@@ -198,6 +198,14 @@ Deploy with:
 ```bash
 vercel deploy
 ```
+## Frontend (Next.js) Integration Guide
+
+The Zynema frontend is maintained in a separate repository: **[zynema/zynema-frontend](https://github.com/zynema/zynema-frontend)**
+
+Follow the steps below to seamlessly connect the Next.js frontend with the Flask backend in both local (development) and production (Vercel) environments.
+
+---
+```
 
 ---
 
@@ -210,7 +218,9 @@ vercel deploy
 | ML / NLP | scikit-learn, TF-IDF, Cosine Similarity |
 | Data | pandas, numpy, scipy |
 | Model Serialization | joblib |
-| Deployment | Vercel (via `@vercel/python`) |
+| Deployment (Backend) | Vercel (via `@vercel/python`) |
+| Deployment (Frontend) | Vercel (via Next.js) |
+| Frontend Repository | [zynema/zynema-frontend](https://github.com/zynema/zynema-frontend) |
 | Dataset | Kaggle — Netflix Original Films |
 | Metadata Enrichment | OMDB API |
 
